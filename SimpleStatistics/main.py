@@ -198,7 +198,19 @@ def calculate_errors(true_bounds, pred_bounds):
     
     return mae, rmse
 
-def plot_results(signal, fs, t_sig, times, ste, zcr, flags, intervals, wav_name, fig_index, screen_w, screen_h):
+def format_segments(bounds, is_true):
+    """
+    Chức năng: Gom nhóm danh sách biên thành các cặp [start, end] để in ra terminal.
+    """
+    segs = []
+    decimals = 2 if is_true else 3
+    for i in range(0, len(bounds), 2):
+        s = round(float(bounds[i]), decimals)
+        e = round(float(bounds[i+1]), decimals) if i+1 < len(bounds) else s
+        segs.append([s, e])
+    return segs
+
+def plot_results(signal, fs, t_sig, times, ste, zcr, flags, intervals, wav_name, threshold, fig_index, screen_w, screen_h):
     """
     Chức năng: Trực quan hóa dữ liệu, in sai số và ép vị trí vào 4 góc màn hình.
     """
@@ -230,6 +242,7 @@ def plot_results(signal, fs, t_sig, times, ste, zcr, flags, intervals, wav_name,
     plt.plot(t_sig, signal, label='Normalized Signal', color='lightgray')
     plt.plot(times, ste, label='STE', color='blue', linewidth=1.5)
     plt.plot(times, zcr, label='ZCR', color='green', linewidth=1.5)
+    plt.axhline(y=threshold, color='purple', linestyle='--', linewidth=1.5, alpha=0.8, label=f'Ngưỡng ({threshold:.3f})')
     plt.title('Đặc trưng trung gian')
     plt.ylabel('Amplitude')
     plt.legend(loc='upper right')
@@ -286,7 +299,12 @@ def main():
     mu_sp, std_sp = np.mean(speech_ste), np.std(speech_ste)
     mu_sil, std_sil = np.mean(silence_ste), np.std(silence_ste)
     threshold = find_intersection(mu_sil, std_sil, mu_sp, std_sp)
+    print(f"=> Phân bố Chuẩn: Speech (μ={mu_sp:.4f}, σ={std_sp:.4f}), Silence (μ={mu_sil:.4f}, σ={std_sil:.4f})\n")
+    
     print(f"=> Ngưỡng STE tối ưu (Threshold): {threshold:.4f}\n")
+    
+    # --- MỚI THÊM: In thông số chung cho terminal ---
+    print(f"[NGUONG DUNG CHUNG] T1 (STE) = {threshold:.5f} | (Dựa trên Phân bố chuẩn)\n")
     
     # ==== 2. KIỂM THỬ (TESTING) ====
     test_dir = 'TinHieuKiemThu'
@@ -303,6 +321,8 @@ def main():
     
     print("--- 2. XUẤT KẾT QUẢ KIỂM THỬ VÀ SAI SỐ (CHỜ HIỂN THỊ ĐỒ THỊ) ---")
     fig_index = 0
+    table_data = [] # MỚI THÊM: Mảng lưu dữ liệu báo cáo
+    
     for file in os.listdir(test_dir):
         if file.endswith('.wav'):
             wav_path = os.path.join(test_dir, file)
@@ -315,8 +335,43 @@ def main():
             flags = np.where(ste > threshold, 1, 0)
             smoothed_flags = smooth_boundaries(flags, min_sil_frames)
             
-            plot_results(signal, fs, t_sig, times, ste, zcr, smoothed_flags, intervals, file, fig_index, screen_w, screen_h)
+            # --- MỚI THÊM: Tính toán và in kết quả từng file ra Terminal ---
+            true_bounds = get_true_speech_boundaries(intervals)
+            diff = np.diff(np.insert(smoothed_flags, 0, 0))
+            pred_bounds = [times[i] for i, d in enumerate(diff) if d == 1 or d == -1]
+            if smoothed_flags[-1] == 1: pred_bounds.append(times[-1])
+            
+            mae, rmse = calculate_errors(true_bounds, pred_bounds)
+            
+            table_data.append({
+                'file': file,
+                'true_count': len(true_bounds),
+                'pred_count': len(pred_bounds),
+                'mae': mae,
+                'rmse': rmse
+            })
+            
+            print(f"{file}")
+            print(f"  chuan : {format_segments(true_bounds, is_true=True)}")
+            print(f"  thuat toan: {format_segments(pred_bounds, is_true=False)}")
+            # -------------------------------------------------------------
+            
+            plot_results(signal, fs, t_sig, times, ste, zcr, smoothed_flags, intervals, file, threshold, fig_index, screen_w, screen_h)
             fig_index += 1
+
+    # --- MỚI THÊM: In bảng tổng hợp KIỂM THỬ ra Terminal ---
+    print("\n[KIEM THU]")
+    print(f"{'File':<15} {'#bien chuan':>11} {'#bien TT':>9} {'MAE(ms)':>9} {'RMSE(ms)':>9}")
+    
+    total_mae, total_rmse = 0, 0
+    for row in table_data:
+        print(f"{row['file']:<15} {row['true_count']:>11} {row['pred_count']:>9} {row['mae']:>9.2f} {row['rmse']:>9.2f}")
+        total_mae += row['mae']
+        total_rmse += row['rmse']
+
+    if table_data:
+        print(f"{'TRUNG BINH':<15} {'':>11} {'':>9} {total_mae/len(table_data):>9.2f} {total_rmse/len(table_data):>9.2f}")
+    # -------------------------------------------------------
 
     plt.show()
 
