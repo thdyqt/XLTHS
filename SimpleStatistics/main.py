@@ -2,6 +2,7 @@ import os
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+import tkinter as tk  # Dùng để lấy độ phân giải màn hình
 
 # Thêm thư mục gốc vào đường dẫn hệ thống để import SharedFunctions.py
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -20,11 +21,10 @@ def read_lab_file(lab_path):
     """
     Chức năng: Đọc file .lab và trích xuất các mốc thời gian của từng nhãn.
     Đầu vào: lab_path (string) - Đường dẫn tới file .lab
-    Đầu ra: intervals (list) - Danh sách các tuple chứa (start_time, end_time, label)
+    Đầu ra: intervals (list) - Danh sách các tuple (start_time, end_time, label)
     """
     intervals = []
     with open(lab_path, 'r') as f:
-        # Đọc từng dòng, bỏ qua 2 dòng chứa chuỗi F0mean và F0std ở cuối
         for line in f:
             parts = line.strip().split()
             if len(parts) == 3 and parts[0] not in ['F0mean', 'F0std']:
@@ -34,12 +34,10 @@ def read_lab_file(lab_path):
 
 def get_frame_label(time_sec, intervals):
     """
-    Chức năng: Đối chiếu 1 mốc thời gian với dữ liệu gốc để xem thuộc Speech hay Silence.
-    Đầu vào: time_sec (float) - Mốc thời gian của khung hiện tại
-             intervals (list) - Dữ liệu nhãn lấy từ hàm read_lab_file
-    Đầu ra: int - 0 nếu là khoảng lặng ('sil'), 1 nếu là tiếng nói ('v' hoặc 'uv')
+    Chức năng: Gán nhãn cho 1 khung dựa vào mốc thời gian so với dữ liệu .lab
+    Đầu vào: time_sec (float), intervals (list)
+    Đầu ra: int - 0 (Khoảng lặng), 1 (Tiếng nói)
     """
-    # Quét qua toàn bộ các đoạn nhãn, nếu thời gian nằm trong đoạn nào thì lấy nhãn đó
     for start, end, label in intervals:
         if start <= time_sec <= end:
             return 0 if label == 'sil' else 1
@@ -47,39 +45,33 @@ def get_frame_label(time_sec, intervals):
 
 def extract_features(signal, fs):
     """
-    Chức năng: Chia khung tín hiệu, áp dụng cửa sổ Hamming, tính giá trị STE và ZCR.
-    Đầu vào: signal (numpy array) - Mảng tín hiệu biên độ
-             fs (int) - Tần số lấy mẫu (Sample rate)
-    Đầu ra: ste, zcr, times (cả 3 là numpy array) - Các đặc trưng đã chuẩn hóa và trục thời gian
+    Chức năng: Chia khung, tính đặc trưng STE và ZCR (đã chuẩn hóa).
+    Đầu vào: signal (numpy array), fs (int)
+    Đầu ra: ste, zcr, times (numpy arrays)
     """
-    # Đổi tham số thời gian từ ms sang số lượng mẫu (samples)
     frame_len = int(fs * FRAME_LEN_MS / 1000)
     frame_shift = int(fs * FRAME_SHIFT_MS / 1000)
-    
     num_frames = int(np.ceil(len(signal) / frame_shift))
+    
     ste = np.zeros(num_frames)
     zcr = np.zeros(num_frames)
     times = np.zeros(num_frames)
     window = np.hamming(frame_len)
     
-    # Duyệt qua từng khung tín hiệu (mỗi block xử lý 5-10 dòng logic cắt khung)
+    # Duyệt từng khung, áp dụng cửa sổ và tính toán đặc trưng
     for i in range(num_frames):
         start_idx = i * frame_shift
         end_idx = min(start_idx + frame_len, len(signal))
         frame = signal[start_idx:end_idx]
         
-        # Thêm padding số 0 nếu khung cuối cùng bị thiếu mẫu
         if len(frame) < frame_len:
             frame = np.pad(frame, (0, frame_len - len(frame)), 'constant')
             
-        frame = frame * window # Áp dụng cửa sổ Hamming chống rò rỉ phổ
-        
-        # Tính toán đặc trưng cho khung hiện tại
+        frame = frame * window
         ste[i] = np.sum(frame ** 2)
         zcr[i] = np.sum(np.abs(np.diff(np.sign(frame)))) / (2 * frame_len)
         times[i] = start_idx / fs
         
-    # Chuẩn hóa giá trị STE và ZCR về dải [0, 1]
     if np.max(ste) > 0: ste = ste / np.max(ste)
     if np.max(zcr) > 0: zcr = zcr / np.max(zcr)
     
@@ -87,9 +79,9 @@ def extract_features(signal, fs):
 
 def calculate_f0_autocorr(signal, fs):
     """
-    Chức năng: Tính đường F0 contour bằng phương pháp tự tương quan (Autocorrelation) dùng thuần Numpy.
-    Đầu vào: signal (numpy array) - Tín hiệu, fs (int) - Tần số lấy mẫu
-    Đầu ra: f0 (numpy array) - Mảng giá trị tần số cơ bản, t_f0 - Trục thời gian
+    Chức năng: Trích xuất F0 bằng phương pháp Tự tương quan.
+    Đầu vào: signal (numpy array), fs (int)
+    Đầu ra: f0, t_f0 (numpy arrays)
     """
     frame_len = int(fs * FRAME_LEN_MS / 1000)
     frame_shift = int(fs * FRAME_SHIFT_MS / 1000)
@@ -97,49 +89,37 @@ def calculate_f0_autocorr(signal, fs):
     
     f0 = np.zeros(num_frames)
     t_f0 = np.zeros(num_frames)
-    
-    # Giới hạn dải tần số F0 tìm kiếm từ 70Hz đến 400Hz (giọng người chuẩn)
     min_lag = int(fs / 400)
     max_lag = int(fs / 70)
     
-    # Tính tự tương quan cho từng khung
+    # Tính tự tương quan để tìm chu kỳ tuần hoàn (đỉnh của hàm tự tương quan)
     for i in range(num_frames):
         start = i * frame_shift
         end = min(start + frame_len, len(signal))
         frame = signal[start:end]
         
-        # Chỉ tính F0 cho các khung đủ độ dài
         if len(frame) == frame_len:
             corr = np.correlate(frame, frame, mode='full')
-            corr = corr[len(corr)//2:] # Lấy nửa sau của mảng đối xứng
-            
-            # Tìm đỉnh cao nhất trong dải lag giới hạn
+            corr = corr[len(corr)//2:] 
             if len(corr) > max_lag:
                 peak_idx = np.argmax(corr[min_lag:max_lag]) + min_lag
                 f0[i] = fs / peak_idx
-                
         t_f0[i] = start / fs
         
-    # Lọc nhiễu: Đặt các giá trị F0 bất thường hoặc nền tảng về 0
     f0 = np.where(f0 > 400, 0, f0)
     return f0, t_f0
 
 def find_intersection(mu1, std1, mu2, std2):
     """
-    Chức năng: Tìm ngưỡng (Threshold) tối ưu bằng cách giải phương trình giao điểm 2 phân bố chuẩn.
-    Đầu vào: mu1, std1 (float) - Trung bình và lệch chuẩn nhóm Silence
-             mu2, std2 (float) - Trung bình và lệch chuẩn nhóm Speech
-    Đầu ra: root (float) - Giá trị ngưỡng giao cắt tối ưu
+    Chức năng: Tìm ngưỡng phân loại bằng cách giải phương trình giao điểm 2 phân bố chuẩn.
+    Đầu vào: Trung bình và độ lệch chuẩn của 2 nhóm (float)
+    Đầu ra: Ngưỡng tối ưu (float)
     """
-    # Tính các hệ số a, b, c của phương trình bậc 2
     a = 1.0/(2*std1**2) - 1.0/(2*std2**2)
     b = mu2/(std2**2) - mu1/(std1**2)
     c = mu1**2 /(2*std1**2) - mu2**2 /(2*std2**2) - np.log(std2/std1)
     
-    # Giải phương trình tìm nghiệm
     roots = np.roots([a, b, c])
-    
-    # Trả về nghiệm có giá trị nằm giữa 2 mốc trung bình
     for root in roots:
         if min(mu1, mu2) <= root <= max(mu1, mu2):
             return root
@@ -147,18 +127,18 @@ def find_intersection(mu1, std1, mu2, std2):
 
 def smooth_boundaries(flags, min_sil_frames):
     """
-    Chức năng: Hậu xử lý xóa các số 1 đơn lẻ và hợp nhất các khoảng lặng ảo (dưới 200ms).
-    Đầu vào: flags (numpy array) - Mảng nhị phân 0/1 ban đầu, min_sil_frames (int) - Số khung tối thiểu
-    Đầu ra: smoothed (numpy array) - Mảng nhị phân sau khi đã làm mượt
+    Chức năng: Xóa các khoảng lặng và tiếng nói ảo quá ngắn (hậu xử lý).
+    Đầu vào: cờ nhãn ban đầu (numpy array), số khung tối thiểu (int)
+    Đầu ra: cờ nhãn đã mượt (numpy array)
     """
     smoothed = flags.copy()
     
-    # 1. Quét tìm và xóa các khung 1 đơn độc bị kẹp giữa các số 0
+    # 1. Xóa các điểm 1 đơn độc
     for i in range(1, len(smoothed) - 1):
         if smoothed[i-1] == 0 and smoothed[i] == 1 and smoothed[i+1] == 0:
             smoothed[i] = 0
             
-    # 2. Xử lý các chuỗi 0 (Khoảng lặng) nếu có thời lượng ngắn hơn ngưỡng min_sil_frames
+    # 2. Hợp nhất các khoảng 0 (Silence) ngắn hơn 200ms thành Speech (1)
     zero_count = 0
     zero_start = -1
     for i in range(len(smoothed)):
@@ -167,27 +147,83 @@ def smooth_boundaries(flags, min_sil_frames):
             zero_count += 1
         else:
             if 0 < zero_count < min_sil_frames:
-                smoothed[zero_start:i] = 1  # Đảo thành Speech vì quá ngắn
+                smoothed[zero_start:i] = 1
             zero_count = 0
             
-    # Xử lý dọn dẹp chuỗi 0 nếu rơi vào đoạn cuối cùng của file
     if 0 < zero_count < min_sil_frames:
         smoothed[zero_start:len(smoothed)] = 1
         
     return smoothed
 
-def plot_results(signal, fs, t_sig, times, ste, zcr, flags, intervals, wav_name):
+def get_true_speech_boundaries(intervals):
     """
-    Chức năng: Dựng dữ liệu lên biểu đồ (Không gọi plt.show() tại đây để tránh chặn chương trình).
-    Đầu vào: Các dữ liệu tín hiệu, đặc trưng, cờ nhãn, trục thời gian và tên file.
-    Đầu ra: None (Hàm thay đổi trạng thái giao diện của matplotlib)
+    Chức năng: Gộp v và uv thành 1 đoạn Speech liên tục để lấy biên thực tế (đỏ).
+    Đầu vào: intervals (list)
+    Đầu ra: Danh sách các mốc thời gian bắt đầu/kết thúc Speech (list)
     """
-    # Tính toán F0 tự code thuần Numpy
-    f0, t_f0 = calculate_f0_autocorr(signal, fs)
+    bounds = []
+    is_speech = False
+    for start, end, label in intervals:
+        if label != 'sil':
+            if not is_speech:
+                bounds.append(start)  # Bắt đầu Speech
+                is_speech = True
+        else:
+            if is_speech:
+                bounds.append(start)  # Kết thúc Speech
+                is_speech = False
+    if is_speech:
+        bounds.append(intervals[-1][1])
+    return bounds
 
-    # Khởi tạo 1 cửa sổ mới cho từng tín hiệu kiểm thử
-    plt.figure(figsize=(10, 6))
-    plt.suptitle(f'Kết quả thực nghiệm thuật toán Simple Statistics: {wav_name}')
+def calculate_errors(true_bounds, pred_bounds):
+    """
+    Chức năng: Tính sai số MAE và RMSE (bằng ms) bằng thuật toán ghép cặp (Nearest Neighbor).
+    Đầu vào: true_bounds (biên đỏ), pred_bounds (biên xanh)
+    Đầu ra: mae, rmse (float) đơn vị mili-giây
+    """
+    if not true_bounds or not pred_bounds:
+        return 0.0, 0.0
+        
+    errors = []
+    for tb in true_bounds:
+        # Tìm biên dự đoán (xanh) nằm gần nhất với biên thực tế (đỏ) hiện tại
+        closest_pb = min(pred_bounds, key=lambda pb: abs(pb - tb))
+        error_ms = abs(tb - closest_pb) * 1000 # Đổi giây sang ms
+        errors.append(error_ms)
+        
+    errors_arr = np.array(errors)
+    mae = np.mean(errors_arr)                      # Mean Absolute Error
+    rmse = np.sqrt(np.mean(errors_arr ** 2))       # Root Mean Squared Error
+    
+    return mae, rmse
+
+def plot_results(signal, fs, t_sig, times, ste, zcr, flags, intervals, wav_name, fig_index, screen_w, screen_h):
+    """
+    Chức năng: Trực quan hóa dữ liệu, in sai số và ép vị trí vào 4 góc màn hình.
+    """
+    f0, t_f0 = calculate_f0_autocorr(signal, fs)
+    
+    # 1. Trích xuất danh sách biên để tính sai số
+    true_bounds = get_true_speech_boundaries(intervals)
+    
+    diff = np.diff(np.insert(flags, 0, 0))
+    pred_bounds = [times[i] for i, d in enumerate(diff) if d == 1 or d == -1]
+    if flags[-1] == 1: pred_bounds.append(times[-1])
+        
+    mae, rmse = calculate_errors(true_bounds, pred_bounds)
+
+    # 2. Khởi tạo và thiết lập vị trí cửa sổ (TkAgg)
+    fig = plt.figure(figsize=(9, 5))
+    plt.suptitle(f'Kết quả {wav_name} | MAE: {mae:.1f}ms - RMSE: {rmse:.1f}ms')
+    
+    mgr = plt.get_current_fig_manager()
+    try:
+        w, h = screen_w // 2, int(screen_h // 2.15)
+        x, y = (fig_index % 2) * w, (fig_index // 2) * h
+        mgr.window.geometry(f"{w}x{h}+{x}+{y}")
+    except Exception:
+        pass 
     
     # ============ TẦNG 1: INTERMEDIATE SUBPLOT ============
     plt.subplot(2, 1, 1)
@@ -203,32 +239,27 @@ def plot_results(signal, fs, t_sig, times, ste, zcr, flags, intervals, wav_name)
     plt.subplot(2, 1, 2)
     plt.plot(t_sig, signal, label='Signal', color='lightgray')
     
-    # Chuẩn hóa F0 để hiển thị đè lên đồ thị tín hiệu, bỏ qua các điểm bằng 0
     f0_plot = np.where(f0 > 0, f0, np.nan) 
     f0_norm = (f0_plot - np.nanmin(f0_plot)) / (np.nanmax(f0_plot) - np.nanmin(f0_plot)) * np.max(np.abs(signal))
     plt.plot(t_f0, f0_norm, 'r.', label='F0 Contour', markersize=3)
     
-    # Vẽ biên thực tế (.lab) và biên dự đoán (flags)
-    for start, end, label in intervals:
-        if label != 'sil':
-            plt.axvline(x=start, color='red', linestyle='-', alpha=0.7)
-            plt.axvline(x=end, color='red', linestyle='-', alpha=0.7)
+    # Vẽ biên thực tế (ĐỎ)
+    for tb in true_bounds:
+        plt.axvline(x=tb, color='red', linestyle='-', linewidth=2, alpha=0.7)
             
-    diff = np.diff(np.insert(flags, 0, 0))
-    for i, d in enumerate(diff):
-        if d == 1 or d == -1: # Bắt đầu hoặc kết thúc vùng Speech
-            plt.axvline(x=times[i], color='blue', linestyle='-', linewidth=2)
+    # Vẽ biên dự đoán (XANH)
+    for pb in pred_bounds:
+        plt.axvline(x=pb, color='blue', linestyle='-', linewidth=2)
             
     plt.title('So sánh biên thời gian và F0')
     plt.xlabel('Time (s)')
     plt.ylabel('Amplitude / F0 (Scaled)')
     
-    # Định dạng Legend thủ công
     import matplotlib.lines as mlines
-    black_line = mlines.Line2D([], [], color='black', linestyle='--', label='Chuẩn (LAB)')
-    blue_line = mlines.Line2D([], [], color='blue', linestyle='-', label='Dự đoán')
-    red_line = mlines.Line2D([], [], color='red', marker='.', linestyle='None', label='F0')
-    plt.legend(handles=[black_line, blue_line, red_line], loc='upper right')
+    red_line = mlines.Line2D([], [], color='red', linestyle='-', label='Chuẩn (Đỏ)')
+    blue_line = mlines.Line2D([], [], color='blue', linestyle='-', label='Dự đoán (Xanh)')
+    f0_dot = mlines.Line2D([], [], color='red', marker='.', linestyle='None', label='F0')
+    plt.legend(handles=[red_line, blue_line, f0_dot], loc='upper right')
     
     plt.tight_layout()
 
@@ -245,15 +276,12 @@ def main():
             
             signal, fs, t_sig = SharedFunctions.readAudio(wav_path)
             intervals = read_lab_file(lab_path)
-            ste, zcr, times = extract_features(signal, fs)
+            ste, _, times = extract_features(signal, fs)
             
-            # Gán giá trị STE vào mảng phân bố tương ứng
             for i, t in enumerate(times):
                 label = get_frame_label(t, intervals)
-                if label == 1:
-                    speech_ste.append(ste[i])
-                else:
-                    silence_ste.append(ste[i])
+                if label == 1: speech_ste.append(ste[i])
+                else: silence_ste.append(ste[i])
                     
     mu_sp, std_sp = np.mean(speech_ste), np.std(speech_ste)
     mu_sil, std_sil = np.mean(silence_ste), np.std(silence_ste)
@@ -264,7 +292,17 @@ def main():
     test_dir = 'TinHieuKiemThu'
     min_sil_frames = int(MIN_SILENCE_MS / FRAME_SHIFT_MS)
     
-    print("--- 2. XUẤT KẾT QUẢ KIỂM THỬ (CHỜ HIỂN THỊ ĐỒ THỊ) ---")
+    # Lấy độ phân giải để neo 4 góc
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        screen_w, screen_h = root.winfo_screenwidth(), root.winfo_screenheight()
+        root.destroy()
+    except Exception:
+        screen_w, screen_h = 1920, 1080
+    
+    print("--- 2. XUẤT KẾT QUẢ KIỂM THỬ VÀ SAI SỐ (CHỜ HIỂN THỊ ĐỒ THỊ) ---")
+    fig_index = 0
     for file in os.listdir(test_dir):
         if file.endswith('.wav'):
             wav_path = os.path.join(test_dir, file)
@@ -274,14 +312,12 @@ def main():
             intervals = read_lab_file(lab_path)
             ste, zcr, times = extract_features(signal, fs)
             
-            # Phân loại và làm mượt
             flags = np.where(ste > threshold, 1, 0)
             smoothed_flags = smooth_boundaries(flags, min_sil_frames)
             
-            # Vẽ lên buffer của plot (Chưa hiển thị ngay)
-            plot_results(signal, fs, t_sig, times, ste, zcr, smoothed_flags, intervals, file)
+            plot_results(signal, fs, t_sig, times, ste, zcr, smoothed_flags, intervals, file, fig_index, screen_w, screen_h)
+            fig_index += 1
 
-    # Hiển thị tất cả 4 figure CÙNG MỘT LÚC ở bước cuối
     plt.show()
 
 if __name__ == "__main__":
