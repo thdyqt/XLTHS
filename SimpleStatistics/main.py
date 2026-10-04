@@ -211,8 +211,8 @@ def plot_results(signal, fs, t_sig, times, ste, zcr, flags, intervals, wav_name)
     # Vẽ biên thực tế (.lab) và biên dự đoán (flags)
     for start, end, label in intervals:
         if label != 'sil':
-            plt.axvline(x=start, color='black', linestyle='--', alpha=0.7)
-            plt.axvline(x=end, color='black', linestyle='--', alpha=0.7)
+            plt.axvline(x=start, color='red', linestyle='-', alpha=0.7)
+            plt.axvline(x=end, color='red', linestyle='-', alpha=0.7)
             
     diff = np.diff(np.insert(flags, 0, 0))
     for i, d in enumerate(diff):
