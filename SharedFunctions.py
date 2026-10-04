@@ -125,43 +125,54 @@ def calculateAccuracy(DetectedSpeech, GroundTruth):
 
     return Accuracy
 
-def plotFinalFigure(TimeAxis, NormalizedSignal, FrameTimeAxis, STE, MA, ZCR, DetectedSpeech, Title="Result"):
-    """Plot the resulting graphs"""
-    fig, axes = pyplot.subplots(5, 1, figsize=(12, 12), sharex=True)
-    fig.suptitle(Title, fontsize=16)
+def plotFinalFigure(TimeAxes, NormalizedSignals, FrameTimeAxes, STEs, MAs, ZCRs, DetectedSpeeches, Titles):
+    """Plot 4 audio files in a 4-corner grid with overlapped features and separation grids."""
+    # 4 rows, 2 columns. Rows 0&1 = Top files. Rows 2&3 = Bottom files.
+    fig, axes = pyplot.subplots(4, 2, figsize=(18, 12))
+    fig.suptitle("Speech Discrimination - Overlapped Features", fontsize=18, fontweight='bold')
 
-    # Subplot 1: Original Waveform with Speech Boundaries highlighted
-    axes[0].plot(TimeAxis, NormalizedSignal, color='darkgray', linewidth=0.5)
-    axes[0].set_title("Normalized Audio Waveform")
-    axes[0].set_ylabel("Amplitude")
-    
-    for i in range(len(DetectedSpeech)):
-        if DetectedSpeech[i]:
-            start_time = FrameTimeAxis[i]
-            axes[0].axvspan(start_time, start_time + 0.01, color='green', alpha=0.3, lw=0)
+    # Grid mapping for the 4 corners: (row, col)
+    grid_positions = [(0, 0), (0, 1), (2, 0), (2, 1)]
 
-    # Subplot 2: Short-Time Energy (STE)
-    axes[1].plot(FrameTimeAxis, STE, color='blue', linewidth=1)
-    axes[1].set_title("Short-Time Energy (STE)")
-    axes[1].set_ylabel("Energy")
+    for i in range(len(Titles)):
+        row, col = grid_positions[i]
+        ax_main = axes[row, col]       # Top cell: Overlapped Waveform + Features
+        ax_bool = axes[row+1, col]     # Bottom cell: Boolean boundaries
 
-    # Subplot 3: Magnitude Average (MA)
-    axes[2].plot(FrameTimeAxis, MA, color='orange', linewidth=1)
-    axes[2].set_title("Magnitude Average (MA)")
-    axes[2].set_ylabel("Magnitude")
-    
-    # Subplot 4: Zero-Crossing Rate (ZCR)
-    axes[3].plot(FrameTimeAxis, ZCR, color='purple', linewidth=1)
-    axes[3].set_title("Zero-Crossing Rate (ZCR)")
-    axes[3].set_ylabel("Crossings")
+        # Normalize features so they fit cleanly over the [-1, 1] audio waveform
+        STE_norm = STEs[i] / numpy.max(STEs[i]) if numpy.max(STEs[i]) > 0 else STEs[i]
+        MA_norm = MAs[i] / numpy.max(MAs[i]) if numpy.max(MAs[i]) > 0 else MAs[i]
+        ZCR_norm = ZCRs[i] / numpy.max(ZCRs[i]) if numpy.max(ZCRs[i]) > 0 else ZCRs[i]
 
-    # Subplot 5: Boolean Speech Classification (1 for Speech, 0 for Silence)
-    axes[4].plot(FrameTimeAxis, DetectedSpeech, color='red', drawstyle='steps-pre')
-    axes[4].set_title("Detected Speech Boundaries (Boolean)")
-    axes[4].set_ylabel("1 = Speech")
-    axes[4].set_xlabel("Time (s)")
-    axes[4].set_ylim(-0.2, 1.2)
+        # --- TOP GRAPH: Overlapped Features ---
+        ax_main.plot(TimeAxes[i], NormalizedSignals[i], color='lightgray', linewidth=0.5, label='Signal')
+        ax_main.plot(FrameTimeAxes[i], STE_norm, color='blue', linewidth=1.5, label='STE')
+        ax_main.plot(FrameTimeAxes[i], MA_norm, color='orange', linewidth=1.5, label='MA')
+        ax_main.plot(FrameTimeAxes[i], ZCR_norm, color='green', linewidth=1.5, label='ZCR')
+        
+        ax_main.set_title(f"Audio: {Titles[i]}")
+        ax_main.set_ylabel("Amplitude")
+        ax_main.set_ylim(-1.1, 1.1)
+        
+        # Add internal background grid lines
+        ax_main.grid(True, which='both', linestyle='--', linewidth=0.7)
+        
+        if i == 0: 
+            ax_main.legend(loc="upper right", fontsize=9)
 
-    pyplot.tight_layout()
+        # --- BOTTOM GRAPH: Detected Speech ---
+        ax_bool.plot(FrameTimeAxes[i], DetectedSpeeches[i], color='red', drawstyle='steps-pre')
+        ax_bool.set_ylabel("1=Speech")
+        ax_bool.set_xlabel("Time (s)")
+        ax_bool.set_ylim(-0.2, 1.2)
+        
+        # Add internal background grid lines
+        ax_bool.grid(True, which='both', linestyle='--', linewidth=0.7)
+        
+        # Link X-axes so zooming the waveform zooms the threshold graph
+        ax_main.sharex(ax_bool)
+
+    # Add explicit spacing between the 4 quadrants (h_pad for vertical, w_pad for horizontal)
+    pyplot.tight_layout(rect=[0, 0, 1, 0.96], h_pad=2.0, w_pad=4.0)
     pyplot.show()
         
