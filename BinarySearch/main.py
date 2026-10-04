@@ -2,27 +2,44 @@ import numpy
 import wave
 import matplotlib.pyplot as pyplot
 
-def read_audio(path):
-    """This function is used to get the data of an audio file for further processes (normalized signal, sample rate, time axis)"""
+def readAudio(path):
+    """This function is used to get the data of an .wav file for further processes (normalized Signal, sample rate, time axis)"""
     with wave.open(path, 'rb') as WavFile:
-        sample_rate = WavFile.getframerate()            #how many samples are there in an amount of time aka frequency
-        sample_amount = WavFile.getnframes()            #how many samples are there 
-        raw_data = WavFile.readframes(sample_amount)    #raw strings of all samples in 16 bit format
+        SampleRate = WavFile.getframerate()            #how many samples are there in an amount of time aka frequency
+        SampleAmount = WavFile.getnframes()            #how many samples are there 
+        RawData = WavFile.readframes(SampleAmount)    #raw strings of all samples in 16 bit format
 
         #read the raw string in 16 bit, as conventional .wav files are saved in 16 bit format
         #this is to ensure that numpy read the raw data correctly
-        signal = numpy.frombuffer(raw_data, dtype=numpy.int16)
+        Signal = numpy.frombuffer(RawData, dtype=numpy.int16)
 
         #normalize the amp to range of -1 to 1
-        max_amp = numpy.max(numpy.max(signal))
-        if max_amp > 0:
-            signal_normalized = signal / max_amp
+        MaxAmp = numpy.max(numpy.abs(Signal))
+        if MaxAmp > 0:
+            SignalNormalized = Signal / MaxAmp
         else:
-            signal_normalized = signal                  #in case signal file is empty so that it doesnt crash
+            SignalNormalized = Signal                  #in case Signal file is empty so that it doesnt crash
 
-        duration = sample_amount / sample_rate
-        time_axis = numpy.linspace(0, duration, num=sample_amount)
+        Duration = SampleAmount / SampleRate
+        TimeAxis = numpy.linspace(0, Duration, num=SampleAmount)
 
-        return signal_normalized, sample_rate, time_axis
-        
+        return SignalNormalized, SampleRate, TimeAxis
+
+def plotWave(path):
+    """This function is used to make graph of an .wav file using the data from function \"readAudio\" """
+    SignalNormalized, SampleRate, TimeAxis = readAudio(path)
+
+    pyplot.figure(figsize=(10,3))
+    pyplot.plot(TimeAxis, SignalNormalized, color='darkgray', linewidth=0.5)
+
+    Title = path.split('/')[-1]
+    pyplot.title(f'Signal of: {Title}')
+    pyplot.xlabel("Time (s)")
+    pyplot.ylabel("Amplitude")
+
+    pyplot.tight_layout()
+    pyplot.show()
+
+
+
 
