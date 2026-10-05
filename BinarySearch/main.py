@@ -181,9 +181,11 @@ def find_shared_threshold_binary_search(feature_arrays, true_boundaries_list, fr
     return best_T
 
 def evaluate_and_print_terminal(results_dict, shared_T):
-    print(f"\n[NGUONG DUNG CHUNG] T1 (STE) = {shared_T:.5f}\n")
-    print(f"{'[KIEM THU]':<15}")
-    print(f"{'File':<20} {'#bien chuan':>11} {'#bien TT':>9} {'MAE(ms)':>9} {'RMSE(ms)':>9}")
+    print(f"\n[SHARED THRESHOLD] T1 (STE) = {shared_T:.5f}\n")
+    print(f"{'[Result of program]':<15}")
+    
+    # 1. Expand header widths to fit the longer English text
+    print(f"{'File':<40} {'#Ground truth borders':>22} {'#Algorithm borders':>19} {'MAE(ms)':>10} {'RMSE(ms)':>10}")
     
     total_mae, total_rmse = 0, 0
     count = 0
@@ -194,10 +196,10 @@ def evaluate_and_print_terminal(results_dict, shared_T):
         
         num_true = len(true_b) * 2  
         num_pred = len(pred_b) * 2
-        
+
         print(f"{filename}")
-        print(f"  chuan : {true_b}")
-        print(f"  thuat toan: {pred_b}")
+        print(f"  ground truth : {true_b}")
+        print(f"  algorithm: {pred_b}")
         
         if len(true_b) > 0 and len(pred_b) > 0:
             start_err_ms = abs(pred_b[0][0] - true_b[0][0]) * 1000
@@ -210,10 +212,15 @@ def evaluate_and_print_terminal(results_dict, shared_T):
             total_rmse += rmse
             count += 1
             
-            print(f"{filename:<20} {num_true:>11} {num_pred:>9} {mae:>9.2f} {rmse:>9.2f}")
+            # Print the separator line
+            print("-" * 32)
+            
+            # 2. Match the variable formatting exactly to the header widths
+            print(f"{filename:<30} {num_true:>22} {num_pred:>19} {mae:>19.2f} {rmse:>10.2f}")
     
     if count > 0:
-        print(f"{'TRUNG BINH':<42} {total_mae/count:>9.2f} {total_rmse/count:>9.2f}")
+        # 3. Calculate total spaces before the MAE column 
+        print(f"{'AVERAGE':<73} {total_mae/count:>19.2f} {total_rmse/count:>10.2f}")
 
 def plotFinalFigure(TimeAxes, NormalizedSignals, FrameTimeAxes, STEs, MAs, ZCRs, TrueBoundariesList, PredBoundariesList, Titles, Thresholds):
     fig, axes = pyplot.subplots(4, 2, figsize=(18, 12))
@@ -244,10 +251,10 @@ def plotFinalFigure(TimeAxes, NormalizedSignals, FrameTimeAxes, STEs, MAs, ZCRs,
 
         ax_bound.plot(TimeAxes[i], NormalizedSignals[i], color='lightgray', linewidth=0.5)
         for start, end in TrueBoundariesList[i]:
-            ax_bound.axvline(start, color='red', linewidth=1.5, label='Chuẩn (Đỏ)')
+            ax_bound.axvline(start, color='red', linewidth=1.5, label='Ground truth (Red)')
             ax_bound.axvline(end, color='red', linewidth=1.5)
         for start, end in PredBoundariesList[i]:
-            ax_bound.axvline(start, color='blue', linewidth=1.5, label='Dự đoán (Xanh)')
+            ax_bound.axvline(start, color='blue', linewidth=1.5, label='Prediction (Blue)')
             ax_bound.axvline(end, color='blue', linewidth=1.5)
 
         ax_bound.set_ylabel("Amplitude")
