@@ -1,2 +1,2 @@
-
-        "TinHieuKiemThu/phone_M1.wav"
+s = [], [], [], [], [], []
+    
