@@ -242,7 +242,7 @@ def evaluate_and_print_terminal(results_dict, T_upper, T_lower, T_zcr):
     if count > 0:
         print(f"{'AVERAGE':<73} {total_mae/count:>19.2f} {total_rmse/count:>10.2f}")
 
-def plotFinalFigure(TimeAxes, NormalizedSignals, FrameTimeAxes, STEs, MAs, ZCRs, TrueBoundariesList, PredBoundariesList, Titles, T_upper, T_lower, T_zcr):
+def plotFinalFigure(TimeAxes, NormalizedSignals, FrameTimeAxes, STEs, MAs, ZCRs, TrueBoundariesList, PredBoundariesList, Titles, T_upper, T_lower):
     fig, axes = pyplot.subplots(4, 2, figsize=(18, 12))
     fig.suptitle("Testing Set Evaluation - Rabiner VAD Algorithm", fontsize=18, fontweight='bold')
     grid_positions = [(0, 0), (0, 1), (2, 0), (2, 1)]
@@ -252,37 +252,30 @@ def plotFinalFigure(TimeAxes, NormalizedSignals, FrameTimeAxes, STEs, MAs, ZCRs,
         ax_main = axes[row, col]       
         ax_bound = axes[row+1, col]    
 
-        # Normalize features so they fit cleanly between 0 and 1
         STE_norm = STEs[i] / np.max(STEs[i]) if np.max(STEs[i]) > 0 else STEs[i]
         MA_norm = MAs[i] / np.max(MAs[i]) if np.max(MAs[i]) > 0 else MAs[i]
         ZCR_norm = ZCRs[i] / np.max(ZCRs[i]) if np.max(ZCRs[i]) > 0 else ZCRs[i]
 
-        # Draw the base signal and the three feature curves
+        # Draw Features
         ax_main.plot(TimeAxes[i], NormalizedSignals[i], color='lightgray', linewidth=0.5, label='Signal')
         ax_main.plot(FrameTimeAxes[i], STE_norm, color='blue', linewidth=1.5, label='STE')
         ax_main.plot(FrameTimeAxes[i], MA_norm, color='orange', linewidth=1.5, label='MA')
         ax_main.plot(FrameTimeAxes[i], ZCR_norm, color='green', linewidth=1.5, label='ZCR')
         
-        # Scale the global thresholds so they align correctly with the normalized feature curves
+        # Plot T_upper and T_lower (normalized visually to match the STE scale)
         norm_T_upper = T_upper / np.max(STEs[i]) if np.max(STEs[i]) > 0 else T_upper
         norm_T_lower = T_lower / np.max(STEs[i]) if np.max(STEs[i]) > 0 else T_lower
-        norm_T_zcr = T_zcr / np.max(ZCRs[i]) if np.max(ZCRs[i]) > 0 else T_zcr
-        
-        # Draw all three thresholds cutting horizontally across the graph
-        ax_main.axhline(norm_T_upper, color='purple', linestyle='--', linewidth=1.5, label='T_upper (STE)')
-        ax_main.axhline(norm_T_lower, color='cyan', linestyle='--', linewidth=1.5, label='T_lower (STE)')
-        ax_main.axhline(norm_T_zcr, color='magenta', linestyle=':', linewidth=1.5, label='T_zcr (ZCR)')
+        ax_main.axhline(norm_T_upper, color='purple', linestyle='--', linewidth=1.5, label='T_upper')
+        ax_main.axhline(norm_T_lower, color='cyan', linestyle='--', linewidth=1.5, label='T_lower')
         
         ax_main.set_title(f"Audio: {Titles[i]}")
         ax_main.set_ylabel("Amplitude")
         ax_main.set_ylim(-1.1, 1.1)
         ax_main.grid(True, which='both', linestyle='--', linewidth=0.7)
-        
-        # Only show the legend on the first graph to prevent clutter
         if i == 0: 
             ax_main.legend(loc="upper right", fontsize=9)
 
-        # Draw the Boundary comparison graph (Bottom subplot)
+        # Draw Boundaries
         ax_bound.plot(TimeAxes[i], NormalizedSignals[i], color='lightgray', linewidth=0.5)
         for start, end in TrueBoundariesList[i]:
             ax_bound.axvline(start, color='red', linewidth=1.5, label='Ground truth (Red)')
@@ -295,12 +288,10 @@ def plotFinalFigure(TimeAxes, NormalizedSignals, FrameTimeAxes, STEs, MAs, ZCRs,
         ax_bound.set_xlabel("Time (s)")
         ax_bound.set_ylim(-1.1, 1.1)
         ax_bound.grid(True, which='both', linestyle='--', linewidth=0.7)
-        
         handles, labels = ax_bound.get_legend_handles_labels()
         unique_labels = dict(zip(labels, handles))
         if i == 0:  
             ax_bound.legend(unique_labels.values(), unique_labels.keys(), loc='upper right', fontsize=9)
-            
         ax_main.sharex(ax_bound)
 
     pyplot.tight_layout(rect=[0, 0, 1, 0.96], h_pad=2.0, w_pad=4.0)
@@ -405,7 +396,7 @@ def run_pipeline():
 
     plotFinalFigure(
         TimeAxes, NormalizedSignals, FrameTimeAxes, 
-        STEs, MAs, ZCRs, TrueBoundariesList, PredBoundariesList, Titles, T_upper, T_lower, T_zcr
+        STEs, MAs, ZCRs, TrueBoundariesList, PredBoundariesList, Titles, T_upper, T_lower
     )
 
 if __name__ == "__main__":
