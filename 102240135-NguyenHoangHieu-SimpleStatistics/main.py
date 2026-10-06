@@ -1,21 +1,39 @@
 import os
-import sys
+import wave
 import numpy as np
 import matplotlib.pyplot as plt
 import tkinter as tk  # Dùng để lấy độ phân giải màn hình
-
-# Thêm thư mục gốc vào đường dẫn hệ thống để import SharedFunctions.py
-parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-if parent_dir not in sys.path:
-    sys.path.append(parent_dir)
-
-import SharedFunctions
 
 # ================= CÁC THAM SỐ CỐ ĐỊNH =================
 FRAME_LEN_MS = 25       # Độ dài khung: 25ms
 FRAME_SHIFT_MS = 10     # Độ dịch khung: 10ms
 MIN_SILENCE_MS = 200    # Khoảng lặng tối thiểu: 200ms
 # =======================================================
+
+# ================= HÀM DÙNG CHUNG (từ SharedFunctions) =================
+def readAudio(path):
+    """Get the data of an .wav file for further processes (normalized Signal, sample rate, time axis)"""
+    with wave.open(path, 'rb') as WavFile:
+        SampleRate = WavFile.getframerate()            #how many samples are there in an amount of time aka frequency
+        SampleAmount = WavFile.getnframes()            #how many samples are there 
+        RawData = WavFile.readframes(SampleAmount)    #raw strings of all samples in 16 bit format
+
+        #read the raw string in 16 bit, as conventional .wav files are saved in 16 bit format
+        #this is to ensure that numpy read the raw data correctly
+        Signal = np.frombuffer(RawData, dtype=np.int16)
+
+        #normalize the amp to range of -1 to 1
+        MaxAmp = np.max(np.abs(Signal))
+        if MaxAmp > 0:
+            SignalNormalized = Signal / MaxAmp
+        else:
+            SignalNormalized = Signal                  #in case Signal file is empty so that it doesnt crash
+
+        Duration = SampleAmount / SampleRate
+        TimeAxis = np.linspace(0, Duration, num=SampleAmount)
+
+        return SignalNormalized, SampleRate, TimeAxis
+# =======================================================================
 
 def read_lab_file(lab_path):
     """
@@ -287,7 +305,7 @@ def main():
             wav_path = os.path.join(train_dir, file)
             lab_path = os.path.join(train_dir, file.replace('.wav', '.lab'))
             
-            signal, fs, t_sig = SharedFunctions.readAudio(wav_path)
+            signal, fs, t_sig = readAudio(wav_path)
             intervals = read_lab_file(lab_path)
             ste, _, times = extract_features(signal, fs)
             
@@ -328,7 +346,7 @@ def main():
             wav_path = os.path.join(test_dir, file)
             lab_path = os.path.join(test_dir, file.replace('.wav', '.lab'))
             
-            signal, fs, t_sig = SharedFunctions.readAudio(wav_path)
+            signal, fs, t_sig = readAudio(wav_path)
             intervals = read_lab_file(lab_path)
             ste, zcr, times = extract_features(signal, fs)
             
