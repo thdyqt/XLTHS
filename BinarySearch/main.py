@@ -181,7 +181,7 @@ def find_shared_threshold_binary_search(feature_arrays, true_boundaries_list, fr
     return best_T
 
 def evaluate_and_print_terminal(results_dict, shared_T):
-    print(f"\n[SHARED THRESHOLD] T1 (STE) = {shared_T:.5f}\n")
+    print(f"\n[SHARED THRESHOLD] T1 (STE) = {shared_T:.5f}\n") 
     print(f"{'[Result of program]':<15}")
     
     # 1. Expand header widths to fit the longer English text
